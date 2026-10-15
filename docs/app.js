@@ -144,73 +144,109 @@ async function decryptIfNeeded(json) {
   }
 }
 
-// 読み込んだ文字列を検証して端末内に保存する。source: 'file' | 'drive'
-async function importDataText(text, fileName, source) {
+// ランク基準表（端末内に保存。預け入れタブと取引タブの報酬計算に使う）
+let rank = null; // { ranks, generatedAt, fileName, importedAt }
+async function loadSavedRank() { rank = (await getSetting('rank')) || null; }
+
+const fmtJst = (iso) => new Date(iso).toLocaleString('ja-JP', { timeZone: 'Asia/Tokyo' });
+
+// 読み込んだ文字列（暗号化されていれば復号）を、取引データかランク基準表かを見分けて保存する
+// 戻り値：表示するメッセージ。キャンセル時は null。失敗時は例外
+async function importText(text, fileName, source) {
   let json;
-  try {
-    json = JSON.parse(text);
-  } catch {
-    alert('読み込めませんでした：JSON 形式のファイルではありません');
-    return;
-  }
-  try {
-    json = await decryptIfNeeded(json);
-    if (!json) return;
-    validateData(json);
-    if (data && source === 'drive' && json.generatedAt === data.generatedAt) {
-      alert('すでに最新のデータです（取得：' + new Date(json.generatedAt).toLocaleString('ja-JP', { timeZone: 'Asia/Tokyo' }) + '）');
-      return;
-    }
-    const meta = { fileName, source, importedAt: new Date().toISOString() };
-    await dbRun('readwrite', (s) => s.put({ data: json, meta }, 'current'), DATA_STORE);
-    data = json;
-    dataMeta = meta;
+  try { json = JSON.parse(text); } catch { throw new Error('JSON 形式のファイルではありません'); }
+  json = await decryptIfNeeded(json);
+  if (!json) return null;
+
+  if (json.format === 'tx-viewer-rank') {
+    const ranks = Deposit.validateRanks(json);
+    if (rank && source === 'drive' && rank.generatedAt === json.generatedAt) return 'ランク基準表は最新です';
+    rank = { ranks, generatedAt: json.generatedAt, fileName, importedAt: new Date().toISOString() };
+    await putSetting('rank', rank);
     refreshAll();
-    alert('読み込みました（取引 ' + data.transfers.length + ' 件）');
+    return 'ランク基準表を読み込みました（' + ranks.length + ' ランク）';
+  }
+
+  validateData(json);
+  if (data && source === 'drive' && json.generatedAt === data.generatedAt) {
+    return 'すでに最新のデータです（取得：' + fmtJst(json.generatedAt) + '）';
+  }
+  const meta = { fileName, source, importedAt: new Date().toISOString() };
+  await dbRun('readwrite', (s) => s.put({ data: json, meta }, 'current'), DATA_STORE);
+  data = json;
+  dataMeta = meta;
+  refreshAll();
+  return '読み込みました（取引 ' + data.transfers.length + ' 件' + (data.deposit ? '、預け先の入出金 ' + data.deposit.transfers.length + ' 件' : '') + '）';
+}
+
+// ファイルから読み込む（取引データ・ランク基準表のどちらでも可）
+document.querySelectorAll('.dataFile').forEach((input) => input.addEventListener('change', async (e) => {
+  const file = e.target.files[0];
+  e.target.value = '';
+  if (!file) return;
+  try {
+    const msg = await importText(await file.text(), file.name, 'file');
+    if (msg) alert(msg);
   } catch (err) {
     alert('読み込めませんでした：' + err.message);
   } finally {
     showStatus();
   }
-}
-
-document.querySelectorAll('.dataFile').forEach((input) => input.addEventListener('change', async (e) => {
-  const file = e.target.files[0];
-  e.target.value = '';
-  if (file) importDataText(await file.text(), file.name, 'file');
 }));
 
 //--------------------------------------------------------------
-// Google ドライブから最新データを取得
+// Google ドライブから最新データを取得（取引データと、選んであればランク基準表）
 //--------------------------------------------------------------
 let driveBusy = false;
 
-async function fetchFromDrive(forcePick) {
+// 記憶しているファイル（key: 'driveFile' | 'driveRankFile'）を取得して読み込む。必要ならファイルを選ばせる
+async function driveImport(key, forcePick, what) {
+  let file = forcePick ? null : await getSetting(key);
+  if (!file) {
+    $('status').textContent = what + 'のファイルを選択中…';
+    file = await Drive.pick(what + 'のファイルを選んでください');
+    if (!file) return null;
+    await putSetting(key, file);
+    renderDriveInfo();
+  }
+  $('status').textContent = what + 'を取得中…';
+  try {
+    const { meta, text } = await Drive.download(file.id);
+    if (meta.name !== file.name) { await putSetting(key, { id: file.id, name: meta.name }); renderDriveInfo(); }
+    return await importText(text, meta.name, 'drive');
+  } catch (err) {
+    if (err.repick) { await delSetting(key); renderDriveInfo(); }
+    throw err;
+  }
+}
+
+// mode: 'all'（取引データ＋ランク基準表）| 'pickData' | 'pickRank'
+async function fetchFromDrive(mode) {
   if (driveBusy) return;
   if (!Drive.configured()) { alert('Google ドライブの連携が設定されていません。'); return; }
   driveBusy = true;
+  const msgs = [];
   try {
     $('status').textContent = '準備中…';
     await Drive.ensureLoaded();
-    let file = forcePick ? null : await getSetting('driveFile');
-    if (!file) {
-      $('status').textContent = 'ファイルを選択中…';
-      file = await Drive.pick();
-      if (!file) return;
-      await putSetting('driveFile', file);
-      renderDriveInfo();
+    if (mode !== 'pickRank') {
+      const m = await driveImport('driveFile', mode === 'pickData', '取引データ');
+      if (m) msgs.push(m);
     }
-    $('status').textContent = 'ドライブから取得中…';
-    const { meta, text } = await Drive.download(file.id);
-    if (meta.name !== file.name) { file = { id: file.id, name: meta.name }; await putSetting('driveFile', file); renderDriveInfo(); }
-    await importDataText(text, meta.name, 'drive');
+    if (mode === 'pickRank' || (mode === 'all' && await getSetting('driveRankFile'))) {
+      const m = await driveImport('driveRankFile', mode === 'pickRank', 'ランク基準表');
+      if (m) msgs.push(m);
+    }
+    if (mode === 'all' && data && data.deposit && !(await getSetting('driveRankFile')) && !rank) {
+      msgs.push('※ 預け入れの報酬を計算するには、「設定」でランク基準表のファイルを選んでください。');
+    }
   } catch (err) {
-    if (err.repick) { await delSetting('driveFile'); renderDriveInfo(); }
-    alert(err.message);
+    msgs.push(err.message);
   } finally {
     driveBusy = false;
     showStatus();
   }
+  if (msgs.length) alert(msgs.join('\n'));
 }
 
 async function renderDriveInfo() {
@@ -218,16 +254,20 @@ async function renderDriveInfo() {
   document.querySelectorAll('.driveOnly').forEach((e) => { e.hidden = !ok; });
   if (!ok) return;
   const file = await getSetting('driveFile');
+  const rankFile = await getSetting('driveRankFile');
   const pass = await getSetting('passphrase');
-  $('driveInfo').textContent = file ? '取得するファイル：' + file.name : '取得するファイル：未選択（初回に選びます）';
+  $('driveInfo').textContent = '取引データ：' + (file ? file.name : '未選択（初回に選びます）');
+  $('driveRankInfo').textContent = 'ランク基準表：' + (rankFile ? rankFile.name : '未選択');
   $('forgetPassBtn').hidden = !pass;
 }
 
-document.querySelectorAll('.driveFetch').forEach((b) => b.addEventListener('click', () => fetchFromDrive(false)));
-$('drivePickBtn').addEventListener('click', () => fetchFromDrive(true));
+document.querySelectorAll('.driveFetch').forEach((b) => b.addEventListener('click', () => fetchFromDrive('all')));
+$('drivePickBtn').addEventListener('click', () => fetchFromDrive('pickData'));
+$('driveRankPickBtn').addEventListener('click', () => fetchFromDrive('pickRank'));
 $('driveSignOutBtn').addEventListener('click', async () => {
   Drive.signOut();
   await delSetting('driveFile');
+  await delSetting('driveRankFile');
   renderDriveInfo();
   alert('Google との連携を解除しました（次回はログインとファイルの選択からやり直します）');
 });
@@ -267,8 +307,7 @@ function renderTx() {
 
   // 残高
   const t = data.targets.find((x) => x.address.toLowerCase() === target);
-  $('balances').replaceChildren(...Object.entries(t ? t.balances : {}).map(([sym, v]) =>
-    el('div', { class: 'card' }, el('div', { class: 'sym' }, sym + ' 残高'), el('div', { class: 'val' }, fmtAmount(v)))));
+  $('balances').replaceChildren(...Object.entries(t ? t.balances : {}).map(([sym, v]) => balanceCard(sym, v, target)));
 
   // 取引
   const rows = data.transfers
@@ -294,6 +333,128 @@ function renderTx() {
       cpBtn, link ? el('div', {}, link) : null);
   }));
 }
+
+// 残高カード。預け入れの集計トークンで、対象アドレスが預け入れ中なら 預入・報酬・累計 を加える
+function balanceCard(sym, wallet, target) {
+  const card = el('div', { class: 'card' }, el('div', { class: 'sym' }, sym + ' 残高'), el('div', { class: 'val' }, fmtAmount(wallet)));
+  const agg = depAggregate();
+  if (!agg || sym !== data.deposit.token) return card;
+  const r = Deposit.rewardFor(agg.byAddress.get(target), Date.parse(data.generatedAt) / 1000);
+  if (!r) return card;
+  card.classList.add('wide');
+  const rows = [['預入枚数', fmtAmount(r.holding)]];
+  if (r.reward == null) {
+    rows.push(['報酬枚数', 'ランク基準表が未読み込み']);
+    rows.push(['累計枚数', fmtAmount(Number(wallet) + r.holding) + '（報酬を除く）']);
+  } else {
+    rows.push(['報酬枚数', fmtAmount(r.reward) + '（' + r.rank + ' ' + fmtPct(r.rate) + '・' + r.days + '日）']);
+    rows.push(['累計枚数', fmtAmount(Number(wallet) + r.holding + r.reward)]);
+  }
+  rows.push(['最終預入', fmtDate(r.lastDepositT)]);
+  card.append(el('div', { class: 'bal-extra' }, ...rows.flatMap(([k, v]) => [el('span', {}, k), el('b', {}, v)])));
+  return card;
+}
+
+//--------------------------------------------------------------
+// 預け入れタブ（預け入れ枚数集計エクセルの移植）
+//--------------------------------------------------------------
+let depMode = Deposit.MODE_NET;
+let depPrice = 0;
+let depCache = null; // { key, agg }
+
+const fmtPct = (v) => (v * 100).toFixed(2) + '%';
+const fmt2 = (v) => Number(v).toLocaleString('ja-JP', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+
+// 集計結果（データ・ランク基準表・集計方式・単価が変わったときだけ計算し直す）
+function depAggregate() {
+  if (!data || !data.deposit) return null;
+  const key = [data.generatedAt, rank ? rank.generatedAt : '', depMode, depPrice].join('|');
+  if (!depCache || depCache.key !== key) depCache = { key, agg: Deposit.aggregate(data.deposit, rank ? rank.ranks : null, { mode: depMode, price: depPrice }) };
+  return depCache.agg;
+}
+
+function kvRows(rows) {
+  return rows.flatMap(([k, v]) => [el('div', { class: 'k' }, k), el('div', { class: 'v' }, v)]);
+}
+
+function renderDeposit() {
+  const agg = depAggregate();
+  $('depEmpty').hidden = !!agg;
+  $('depBody').hidden = !agg;
+  if (!agg) return;
+  const d = data.deposit;
+  const tt = agg.total;
+  const hasRank = !!rank;
+  const na = '—';
+  $('depRankNote').hidden = hasRank;
+  $('depMode').value = depMode;
+  if (document.activeElement !== $('depPrice')) $('depPrice').value = depPrice || '';
+
+  const diff = tt.custodyActual != null ? tt.custodyActual - tt.custodyCalc : null;
+  $('depHeader').textContent = '取得：' + fmtJst(data.generatedAt) + '　トークン：' + d.token + '　預け先：' + labelOf(d.custodian) +
+    (tt.custodyActual != null ? '　預け先の実際の残高：' + fmt2(tt.custodyActual) + '（取引からの計算との差：' + Number(diff.toFixed(6)).toLocaleString('ja-JP', { maximumFractionDigits: 6 }) + '）' : '') +
+    (hasRank ? '　ランク基準表：' + rank.fileName : '');
+
+  $('depTotal').replaceChildren(...kvRows([
+    ['保有ユーザ数（人）', tt.users.toLocaleString('ja-JP')],
+    ['総保有枚数', fmt2(tt.holding)],
+    ['報酬枚数（日）', hasRank ? fmt2(tt.rewardDay) : na],
+    ['報酬枚数（月）', hasRank ? fmt2(tt.rewardMonth) : na],
+    ['報酬枚数（年）', hasRank ? fmt2(tt.rewardYear) : na],
+    ['参考：対象外ユーザ数（除外指定・保有0以下）', tt.excluded.toLocaleString('ja-JP')],
+    ['参考：預け先残高（取引からの計算：預入−返却）', fmt2(tt.custodyCalc)],
+  ]));
+  $('depCost').replaceChildren(...kvRows([
+    ['1枚当たり単価', depPrice ? depPrice.toLocaleString('ja-JP', { maximumFractionDigits: 4 }) : '未入力'],
+    ['費用（日）＝報酬枚数（日）×単価', hasRank ? fmt2(tt.costDay) : na],
+    ['費用（月）＝報酬枚数（月）×単価', hasRank ? fmt2(tt.costMonth) : na],
+    ['費用（年）＝報酬枚数（年）×単価', hasRank ? fmt2(tt.costYear) : na],
+  ]));
+
+  // ランク別集計（構成比は横棒で表示）
+  const th = (t, n) => el('th', n ? { class: 'n' } : {}, t);
+  const td = (t, n) => el('td', n ? { class: 'n' } : {}, t);
+  if (hasRank) {
+    const maxShare = Math.max(...agg.byRank.map((r) => r.share), 0.0001);
+    $('depRanks').replaceChildren(
+      el('tr', {}, th('ランク'), th('下限（枚）', 1), th('上限（枚）', 1), th('年利', 1), th('人数', 1), th('構成比'), th('保有枚数合計', 1), th('報酬枚数（日）合計', 1)),
+      ...agg.byRank.map((r) => el('tr', { title: r.name + '：' + r.users + '人（' + (r.share * 100).toFixed(1) + '%）' },
+        td(r.name), td(r.min.toLocaleString('ja-JP'), 1), td(r.max == null ? '以上' : r.max.toLocaleString('ja-JP'), 1), td(fmtPct(r.rate), 1), td(r.users.toLocaleString('ja-JP'), 1),
+        el('td', {}, el('div', { class: 'share' }, el('div', { class: 'bar', style: 'width:' + Math.max(2, r.share / maxShare * 80) + 'px' }), el('span', { class: 'pct' }, (r.share * 100).toFixed(1) + '%'))),
+        td(fmt2(r.holding), 1), td(fmt2(r.rewardDay), 1))),
+      el('tr', { class: 'total' }, td('合計'), td(''), td(''), td(''), td(tt.users.toLocaleString('ja-JP'), 1), td(tt.users ? '100.0%' : '0.0%'), td(fmt2(tt.holding), 1), td(fmt2(tt.rewardDay), 1)));
+  } else {
+    $('depRanks').replaceChildren(el('tr', {}, el('td', {}, 'ランク基準表が未読み込みです')));
+  }
+
+  // 保有ユーザランキング
+  $('depList').replaceChildren(
+    el('tr', {}, th('順位', 1), th('保有ユーザ'), th('保有枚数', 1), th('ランク'), th('年利', 1), th('報酬枚数（日）', 1), th('報酬枚数（月）', 1), th('報酬枚数（年）', 1),
+      th('費用（日）', 1), th('預入件数', 1), th('返却件数', 1), th('備考')),
+    ...agg.list.map((u) => {
+      const b = book.get(u.address);
+      return el('tr', {},
+        td(String(u.order), 1),
+        el('td', {}, el('button', { class: 'cp', type: 'button', onclick: () => openNameDialog(u.address) }, short(u.address))),
+        td(fmt2(u.holding), 1), td(hasRank ? u.rank : na), td(hasRank ? fmtPct(u.rate) : na, 1),
+        td(hasRank ? fmt2(u.rewardDay) : na, 1), td(hasRank ? fmt2(u.rewardMonth) : na, 1), td(hasRank ? fmt2(u.rewardYear) : na, 1),
+        td(hasRank && depPrice ? fmt2(u.costDay) : na, 1), td(String(u.depN), 1), td(String(u.wdN), 1),
+        td(b ? b.name + (b.category ? '（' + b.category + '）' : '') : ''));
+    }));
+}
+
+$('depMode').addEventListener('change', async () => {
+  depMode = $('depMode').value;
+  await putSetting('depMode', depMode);
+  renderDeposit();
+  renderTx();
+});
+$('depPrice').addEventListener('change', async () => {
+  const v = Number($('depPrice').value);
+  depPrice = Number.isFinite(v) && v > 0 ? v : 0;
+  await putSetting('depPrice', depPrice);
+  renderDeposit();
+});
 
 //--------------------------------------------------------------
 // 名前の登録ダイアログ（取引一覧の相手先をタップ）
@@ -414,11 +575,15 @@ function refreshAll() {
   if (data) {
     renderTargets();
     renderTx();
+    renderDeposit();
     const fmt = (s) => new Date(s).toLocaleString('ja-JP', { timeZone: 'Asia/Tokyo' });
     $('dataInfo').textContent = 'ファイル：' + dataMeta.fileName + '　取得：' + fmt(data.generatedAt) + '　読み込み：' + fmt(dataMeta.importedAt) +
-      '　チェーン：' + data.chain.name + '　対象アドレス：' + data.targets.length + ' 件　取引：' + data.transfers.length + ' 件';
+      '　チェーン：' + data.chain.name + '　対象アドレス：' + data.targets.length + ' 件　取引：' + data.transfers.length + ' 件' +
+      (data.deposit ? '　預け先の入出金：' + data.deposit.transfers.length + ' 件' : '') +
+      '　ランク基準表：' + (rank ? rank.fileName + '（' + fmtJst(rank.generatedAt) + '）' : '未読み込み');
   } else {
     $('dummyNote').hidden = true;
+    renderDeposit();
   }
   renderBook();
   renderDriveInfo();
@@ -470,6 +635,9 @@ $('updateBtn').addEventListener('click', async () => {
   if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(console.error);
   await loadBook();
   await loadSavedData();
+  await loadSavedRank();
+  depMode = (await getSetting('depMode')) || Deposit.MODE_NET;
+  depPrice = Number(await getSetting('depPrice')) || 0;
   refreshAll();
   showStorageInfo();
 })();

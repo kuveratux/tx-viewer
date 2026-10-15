@@ -69,7 +69,7 @@ const Drive = (() => {
   }
 
   // ファイルを選ぶ（初回・ファイルを変えるとき）。{ id, name } を返す。キャンセル時は null
-  async function pick() {
+  async function pick(title) {
     const accessToken = await getToken();
     return new Promise((resolve) => {
       const mine = new google.picker.DocsView(google.picker.ViewId.DOCS).setIncludeFolders(true).setMode(google.picker.DocsViewMode.LIST);
@@ -79,7 +79,7 @@ const Drive = (() => {
         .setDeveloperKey(GOOGLE.apiKey)
         .setAppId(GOOGLE.appId)
         .setLocale('ja')
-        .setTitle('データファイルを選んでください')
+        .setTitle(title || 'データファイルを選んでください')
         .addView(shared)
         .addView(mine)
         .setCallback((d) => {

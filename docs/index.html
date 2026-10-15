@@ -25,6 +25,7 @@
 
 <nav class="tabs" role="tablist">
   <button role="tab" data-tab="tx" aria-selected="true">取引</button>
+  <button role="tab" data-tab="deposit">預け入れ</button>
   <button role="tab" data-tab="book">アドレス帳</button>
   <button role="tab" data-tab="settings">設定</button>
 </nav>
@@ -60,6 +61,39 @@
     </div>
     <p id="txCount" class="muted"></p>
     <ul id="txList" class="txlist"></ul>
+    </div>
+  </section>
+
+  <!-- 預け入れ -->
+  <section id="tab-deposit" class="tab" hidden>
+    <div id="depEmpty" class="card" hidden>
+      <h2>預け入れデータがありません</h2>
+      <p class="muted">取得エクセルの「設定」シートで預け先アドレスを設定して取得したデータを読み込むと、集計が表示されます。</p>
+    </div>
+    <div id="depBody" hidden>
+      <p id="depHeader" class="muted"></p>
+      <div id="depRankNote" class="note" hidden>ランク基準表が未読み込みのため、ランクと報酬は計算していません。「設定」でランク基準表のファイルを選んでください。</div>
+      <div class="filters">
+        <label>集計方式
+          <select id="depMode">
+            <option value="net">純額（預入−返却）</option>
+            <option value="deposit">預入のみ</option>
+          </select>
+        </label>
+        <label>1枚当たり単価（費用試算）
+          <input id="depPrice" type="number" inputmode="decimal" min="0" step="any" placeholder="0">
+        </label>
+      </div>
+      <h2 class="sec">全体集計</h2>
+      <div id="depTotal" class="kv"></div>
+      <h2 class="sec">費用試算</h2>
+      <div id="depCost" class="kv"></div>
+      <h2 class="sec">ランク別集計</h2>
+      <div class="scroll"><table id="depRanks" class="grid"></table></div>
+      <h2 class="sec">保有ユーザランキング（保有枚数の多い順）</h2>
+      <p class="muted">アドレスをタップすると名前を登録できます（備考に表示）。</p>
+      <div class="scroll"><table id="depList" class="grid"></table></div>
+      <p class="muted">報酬枚数（年）＝保有枚数×ランクの年利、（月）＝年÷12、（日）＝年÷365。保有枚数が0以下のユーザと、除外アドレスは対象外です。</p>
     </div>
   </section>
 
@@ -113,9 +147,11 @@
     <div class="card driveOnly" hidden>
       <h2>Google ドライブ</h2>
       <p id="driveInfo" class="muted"></p>
-      <p class="muted">このアプリが読めるのは、ここで選んだファイルだけです。ドライブのほかのファイルは見えません。</p>
+      <p id="driveRankInfo" class="muted"></p>
+      <p class="muted">このアプリが読めるのは、ここで選んだファイルだけです。ドライブのほかのファイルは見えません。「最新データを取得」で、取引データとランク基準表の両方を取得します。</p>
       <div class="row">
-        <button id="drivePickBtn">ファイルを選び直す</button>
+        <button id="drivePickBtn">取引データを選び直す</button>
+        <button id="driveRankPickBtn">ランク基準表を選ぶ</button>
         <button id="driveSignOutBtn">連携を解除</button>
         <button id="forgetPassBtn" hidden>保存した合言葉を削除</button>
       </div>
@@ -150,6 +186,7 @@
 </dialog>
 
 <script src="version.js"></script>
+<script src="deposit.js"></script>
 <script src="drive.js"></script>
 <script src="app.js"></script>
 </body>

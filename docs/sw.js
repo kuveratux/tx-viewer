@@ -12,6 +12,7 @@ const SHELL_FILES = [
   './',
   'index.html',
   'version.js',
+  'deposit.js',
   'drive.js',
   'app.js',
   'style.css',

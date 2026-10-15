@@ -95,3 +95,23 @@ dialog::backdrop { background: rgba(0,0,0,.4); }
 .note.update { margin: 10px 16px 0; display: flex; align-items: center; justify-content: space-between; gap: 8px; }
 .note.update button { padding: 4px 12px; }
 .cp .cp-label { color: var(--muted); font-size: 12px; margin-right: 2px; }
+.tabs button { font-size: 14px; }
+h2.sec { margin: 16px 0 6px; }
+.kv { display: grid; grid-template-columns: 1fr auto; gap: 0; background: var(--card); border: 1px solid var(--line); border-radius: 10px; overflow: hidden; }
+.kv > div { padding: 7px 12px; border-top: 1px solid var(--line); }
+.kv > div:nth-child(-n+2) { border-top: 0; }
+.kv .k { color: var(--muted); font-size: 13px; }
+.kv .v { text-align: right; font-variant-numeric: tabular-nums; font-weight: 600; }
+.filters input { display: block; width: 100%; margin-top: 3px; padding: 8px; font: inherit; color: var(--text); background: var(--card); border: 1px solid var(--line); border-radius: 8px; }
+.scroll { overflow-x: auto; -webkit-overflow-scrolling: touch; border: 1px solid var(--line); border-radius: 10px; background: var(--card); }
+table.grid { border-collapse: collapse; width: 100%; font-size: 13px; font-variant-numeric: tabular-nums; }
+table.grid th, table.grid td { padding: 6px 8px; border-bottom: 1px solid var(--line); white-space: nowrap; }
+table.grid th { position: sticky; top: 0; background: var(--card); color: var(--muted); font-weight: 600; text-align: left; }
+table.grid td.n, table.grid th.n { text-align: right; }
+table.grid tr.total td { font-weight: 700; background: var(--bg); }
+.share { display: flex; align-items: center; gap: 6px; min-width: 120px; }
+.share .bar { height: 8px; border-radius: 0 4px 4px 0; background: var(--accent); }
+.share .pct { color: var(--muted); font-size: 12px; min-width: 40px; text-align: right; }
+.bal-extra { margin-top: 6px; font-size: 12px; color: var(--muted); display: grid; grid-template-columns: auto 1fr; gap: 2px 8px; }
+.bal-extra b { color: var(--text); text-align: right; font-variant-numeric: tabular-nums; }
+.cards .card.wide { grid-column: 1 / -1; }
