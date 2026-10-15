@@ -32,6 +32,12 @@
   <!-- 取引 -->
   <section id="tab-tx" class="tab">
     <div id="dummyNote" class="note" hidden>表示しているのは動作確認用のダミーデータです。</div>
+    <div id="emptyNote" class="card" hidden>
+      <h2>データがありません</h2>
+      <p class="muted">受け取ったデータファイルを読み込むと、取引が表示されます。</p>
+      <label class="button primary">データファイルを読み込む<input class="dataFile" type="file" accept="application/json,.json" hidden></label>
+    </div>
+    <div id="txBody" hidden>
     <label class="field">対象アドレス
       <select id="targetSel"></select>
     </label>
@@ -48,6 +54,7 @@
     </div>
     <p id="txCount" class="muted"></p>
     <ul id="txList" class="txlist"></ul>
+    </div>
   </section>
 
   <!-- アドレス帳 -->
@@ -85,8 +92,9 @@
     </div>
     <div class="card">
       <h2>データ</h2>
-      <p id="dataInfo" class="muted"></p>
-      <button id="reloadBtn">データを再読み込み</button>
+      <p id="dataInfo" class="muted">まだ読み込んでいません。</p>
+      <p class="muted">データは自動では更新されません。新しいデータファイルを受け取ったら、ここから読み込んでください（暗号化されたファイルは合言葉を入力します）。</p>
+      <label class="button primary">データファイルを読み込む<input class="dataFile" type="file" accept="application/json,.json" hidden></label>
     </div>
   </section>
 </main>
@@ -99,6 +107,18 @@
     <label class="field">分類 <input id="dlgCat" list="catList" autocomplete="off"></label>
     <div class="row">
       <button value="save" class="primary">保存</button>
+      <button value="cancel" formnovalidate>やめる</button>
+    </div>
+  </form>
+</dialog>
+
+<dialog id="passDlg">
+  <form method="dialog">
+    <h2>合言葉を入力</h2>
+    <p class="muted">このデータファイルは暗号化されています。合言葉は端末の外には送られません。</p>
+    <label class="field">合言葉 <input id="passInput" type="password" autocomplete="off" spellcheck="false"></label>
+    <div class="row">
+      <button value="ok" class="primary">開く</button>
       <button value="cancel" formnovalidate>やめる</button>
     </div>
   </form>

@@ -1,34 +1,40 @@
 'use strict';
 
 // 取引ビューア
-// 取引データ（data/transactions.json）は公開データ。名前・分類（アドレス帳）は端末内の IndexedDB だけに保存する。
+// 取引データは、利用者が選んだファイルから読み込む（自動では取りに行かない）。
+// 取引データ・名前・分類（アドレス帳）は、すべて端末内の IndexedDB だけに保存する。
 
-const DATA_URL = 'data/transactions.json';
 const $ = (id) => document.getElementById(id);
 
 let data = null;   // 取引データ
+let dataMeta = null; // { fileName, importedAt }
 let book = new Map(); // address(小文字) -> { address, name, category, updatedAt }
 
 //--------------------------------------------------------------
-// アドレス帳（IndexedDB）
+// 端末内の保存（IndexedDB）
 //--------------------------------------------------------------
 const DB_NAME = 'tx-viewer';
 const STORE = 'addressbook';
+const DATA_STORE = 'dataset';
 
 function openDb() {
   return new Promise((resolve, reject) => {
-    const req = indexedDB.open(DB_NAME, 1);
-    req.onupgradeneeded = () => req.result.createObjectStore(STORE, { keyPath: 'address' });
+    const req = indexedDB.open(DB_NAME, 2);
+    req.onupgradeneeded = () => {
+      const db = req.result;
+      if (!db.objectStoreNames.contains(STORE)) db.createObjectStore(STORE, { keyPath: 'address' });
+      if (!db.objectStoreNames.contains(DATA_STORE)) db.createObjectStore(DATA_STORE);
+    };
     req.onsuccess = () => resolve(req.result);
     req.onerror = () => reject(req.error);
   });
 }
 
-async function dbRun(mode, fn) {
+async function dbRun(mode, fn, store = STORE) {
   const db = await openDb();
   return new Promise((resolve, reject) => {
-    const tx = db.transaction(STORE, mode);
-    const result = fn(tx.objectStore(STORE));
+    const tx = db.transaction(store, mode);
+    const result = fn(tx.objectStore(store));
     tx.oncomplete = () => resolve(result && 'result' in result ? result.result : undefined);
     tx.onerror = () => reject(tx.error);
   });
@@ -75,19 +81,88 @@ function labelOf(address) {
 }
 
 //--------------------------------------------------------------
-// 取引データの読み込み
+// 取引データ：ファイルから読み込み、端末内に保存
 //--------------------------------------------------------------
-async function loadData() {
-  $('status').textContent = '読み込み中…';
-  try {
-    const res = await fetch(DATA_URL, { cache: 'no-cache' });
-    if (!res.ok) throw new Error('HTTP ' + res.status);
-    data = await res.json();
-    $('status').textContent = '更新：' + new Date(data.generatedAt).toLocaleString('ja-JP', { timeZone: 'Asia/Tokyo', month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' });
-  } catch (e) {
-    $('status').textContent = 'データを取得できませんでした';
-    console.error(e);
+async function loadSavedData() {
+  const saved = await dbRun('readonly', (s) => s.get('current'), DATA_STORE);
+  if (saved) { data = saved.data; dataMeta = saved.meta; }
+}
+
+function validateData(d) {
+  if (!d || (d.format && d.format !== 'tx-viewer-data') || d.version !== 1 ||
+      !Array.isArray(d.targets) || !Array.isArray(d.tokens) || !Array.isArray(d.transfers) || !d.chain) {
+    throw new Error('取引ビューアのデータファイルではありません');
   }
+  return d;
+}
+
+// 暗号化ファイルの復号（取得プログラムと同じ方式：PBKDF2-SHA256 → AES-256-GCM）
+const b64 = (s) => Uint8Array.from(atob(s), (c) => c.charCodeAt(0));
+async function decryptData(enc, passphrase) {
+  const base = await crypto.subtle.importKey('raw', new TextEncoder().encode(passphrase.normalize('NFC')), 'PBKDF2', false, ['deriveKey']);
+  const key = await crypto.subtle.deriveKey(
+    { name: 'PBKDF2', hash: enc.kdf.hash, salt: b64(enc.kdf.salt), iterations: enc.kdf.iterations },
+    base, { name: 'AES-GCM', length: 256 }, false, ['decrypt']);
+  const plain = await crypto.subtle.decrypt({ name: 'AES-GCM', iv: b64(enc.cipher.iv) }, key, b64(enc.data));
+  return JSON.parse(new TextDecoder().decode(plain));
+}
+
+function askPassphrase() {
+  return new Promise((resolve) => {
+    const dlg = $('passDlg');
+    $('passInput').value = '';
+    dlg.addEventListener('close', () => resolve(dlg.returnValue === 'ok' ? $('passInput').value : null), { once: true });
+    dlg.showModal();
+  });
+}
+
+async function importDataFile(file) {
+  let json;
+  try {
+    json = JSON.parse(await file.text());
+  } catch {
+    alert('読み込めませんでした：JSON 形式のファイルではありません');
+    return;
+  }
+  try {
+    if (json.format === 'tx-viewer-data-enc') {
+      for (;;) {
+        const pass = await askPassphrase();
+        if (pass == null) return;
+        $('status').textContent = '復号中…';
+        try {
+          json = await decryptData(json, pass);
+          break;
+        } catch {
+          $('status').textContent = '';
+          if (!confirm('合言葉が違うか、ファイルが壊れています。もう一度入力しますか？')) return;
+        }
+      }
+    }
+    validateData(json);
+    const meta = { fileName: file.name, importedAt: new Date().toISOString() };
+    await dbRun('readwrite', (s) => s.put({ data: json, meta }, 'current'), DATA_STORE);
+    data = json;
+    dataMeta = meta;
+    refreshAll();
+    alert('読み込みました（取引 ' + data.transfers.length + ' 件）');
+  } catch (err) {
+    alert('読み込めませんでした：' + err.message);
+  } finally {
+    showStatus();
+  }
+}
+
+document.querySelectorAll('.dataFile').forEach((input) => input.addEventListener('change', (e) => {
+  const file = e.target.files[0];
+  e.target.value = '';
+  if (file) importDataFile(file);
+}));
+
+function showStatus() {
+  $('status').textContent = data
+    ? '取得：' + new Date(data.generatedAt).toLocaleString('ja-JP', { timeZone: 'Asia/Tokyo', month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' })
+    : 'データ未読み込み';
 }
 
 //--------------------------------------------------------------
@@ -226,7 +301,6 @@ async function showStorageInfo() {
     : '保存の持続化：未許可（念のため定期的に書き出しをおすすめします）';
 }
 
-$('reloadBtn').addEventListener('click', async () => { await loadData(); refreshAll(); });
 
 //--------------------------------------------------------------
 // インストール（Android の Chrome などで使える）
@@ -255,18 +329,25 @@ document.querySelectorAll('.tabs button').forEach((btn) => btn.addEventListener(
 ['targetSel', 'tokenSel', 'dirSel'].forEach((id) => $(id).addEventListener('change', renderTx));
 
 function refreshAll() {
+  $('emptyNote').hidden = !!data;
+  $('txBody').hidden = !data;
   if (data) {
     renderTargets();
     renderTx();
-    $('dataInfo').textContent = 'チェーン：' + data.chain.name + '　対象アドレス：' + data.targets.length + ' 件　取引：' + data.transfers.length + ' 件';
+    const fmt = (s) => new Date(s).toLocaleString('ja-JP', { timeZone: 'Asia/Tokyo' });
+    $('dataInfo').textContent = 'ファイル：' + dataMeta.fileName + '　取得：' + fmt(data.generatedAt) + '　読み込み：' + fmt(dataMeta.importedAt) +
+      '　チェーン：' + data.chain.name + '　対象アドレス：' + data.targets.length + ' 件　取引：' + data.transfers.length + ' 件';
+  } else {
+    $('dummyNote').hidden = true;
   }
   renderBook();
+  showStatus();
 }
 
 (async function init() {
   if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(console.error);
   await loadBook();
-  await loadData();
+  await loadSavedData();
   refreshAll();
   showStorageInfo();
 })();
