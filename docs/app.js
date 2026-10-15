@@ -386,25 +386,21 @@ function renderTx() {
   }));
 }
 
-// 残高カード。預け入れの集計トークンで、対象アドレスが預け入れ中なら 預入・報酬・累計 を加える
+// 残高カード。預け入れの集計トークンで、対象アドレスが預け入れ中なら、
+// 残高に累計枚数（ウォレット＋預入＋報酬）を表示し、内訳を下に並べる
 function balanceCard(sym, wallet, target) {
-  const card = el('div', { class: 'card' }, el('div', { class: 'sym' }, sym + ' 残高'), el('div', { class: 'val' }, fmtAmount(wallet)));
+  const head = el('div', { class: 'sym' }, sym + ' 残高');
   const agg = depAggregate();
-  if (!agg || sym !== data.deposit.token) return card;
-  const r = Deposit.rewardFor(agg.byAddress.get(target), Date.parse(data.generatedAt) / 1000);
-  if (!r) return card;
-  card.classList.add('wide');
-  const rows = [['預入枚数', fmtAmount(r.holding)]];
-  if (r.reward == null) {
-    rows.push(['報酬枚数', 'ランク基準表が未読み込み']);
-    rows.push(['累計枚数', fmtAmount(Number(wallet) + r.holding) + '（報酬を除く）']);
-  } else {
-    rows.push(['報酬枚数', fmtAmount(r.reward) + '（' + r.rank + ' ' + fmtPct(r.rate) + '・' + r.days + '日）']);
-    rows.push(['累計枚数', fmtAmount(Number(wallet) + r.holding + r.reward)]);
-  }
+  const r = agg && sym === data.deposit.token ? Deposit.rewardFor(agg.byAddress.get(target), Date.parse(data.generatedAt) / 1000) : null;
+  if (!r) return el('div', { class: 'card' }, head, el('div', { class: 'val' }, fmtAmount(wallet)));
+
+  const total = Number(wallet) + r.holding + (r.reward || 0);
+  const val = el('div', { class: 'val' }, fmtAmount(total), r.reward == null ? el('span', { class: 'val-note' }, '（報酬を除く）') : null);
+  const rows = [['ウォレット', fmtAmount(wallet)], ['預入枚数', fmtAmount(r.holding)]];
+  rows.push(['報酬枚数', r.reward == null ? 'ランク基準表が未読み込み' : fmtAmount(r.reward) + '（' + r.rank + ' ' + fmtPct(r.rate) + '・' + r.days + '日）']);
   rows.push(['最終預入', fmtDate(r.lastDepositT)]);
-  card.append(el('div', { class: 'bal-extra' }, ...rows.flatMap(([k, v]) => [el('span', {}, k), el('b', {}, v)])));
-  return card;
+  return el('div', { class: 'card wide' }, head, val,
+    el('div', { class: 'bal-extra' }, ...rows.flatMap(([k, v]) => [el('span', {}, k), el('b', {}, v)])));
 }
 
 //--------------------------------------------------------------

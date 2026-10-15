@@ -115,6 +115,7 @@ table.grid tr.total td { font-weight: 700; background: var(--bg); }
 .bal-extra { margin-top: 6px; font-size: 12px; color: var(--muted); display: grid; grid-template-columns: auto 1fr; gap: 2px 8px; }
 .bal-extra b { color: var(--text); text-align: right; font-variant-numeric: tabular-nums; }
 .cards .card.wide { grid-column: 1 / -1; }
+.val-note { font-size: 12px; font-weight: 400; color: var(--muted); margin-left: 6px; }
 .orderlist { list-style: none; padding: 0; margin: 8px 0; }
 .orderlist li { display: flex; align-items: center; gap: 8px; padding: 6px 0; border-bottom: 1px solid var(--line); }
 .orderlist li:last-child { border-bottom: 0; }
