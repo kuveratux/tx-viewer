@@ -294,9 +294,60 @@ function renderTargets() {
 
   const tokSel = $('tokenSel');
   const curTok = tokSel.value;
-  tokSel.replaceChildren(el('option', { value: '' }, 'すべて'), ...data.tokens.map((t) => el('option', { value: t.symbol }, t.symbol)));
+  tokSel.replaceChildren(el('option', { value: '' }, 'すべて'), ...orderSymbols(data.tokens.map((t) => t.symbol)).map((s) => el('option', { value: s }, s)));
   tokSel.value = curTok;
 }
+
+//--------------------------------------------------------------
+// 残高の表示順（端末ごと）
+//   balOrder：保存した順。データにない銘柄も残しておき、戻ってきたときは元の位置に出す
+//   保存した順にない銘柄（あとから追加された銘柄）は末尾に、データの順で並べる
+//--------------------------------------------------------------
+let balOrder = [];
+
+// データに出てくる銘柄（残高の銘柄 → トークン一覧の順。重複なし）
+function dataSymbols() {
+  if (!data) return [];
+  const syms = [];
+  for (const t of data.targets) for (const s of Object.keys(t.balances || {})) if (!syms.includes(s)) syms.push(s);
+  for (const t of data.tokens) if (!syms.includes(t.symbol)) syms.push(t.symbol);
+  return syms;
+}
+
+function orderSymbols(syms) {
+  const saved = balOrder.filter((s) => syms.includes(s));
+  return [...saved, ...syms.filter((s) => !saved.includes(s))];
+}
+
+async function moveSymbol(sym, delta) {
+  const shown = orderSymbols(dataSymbols());
+  const i = shown.indexOf(sym);
+  const j = i + delta;
+  if (i < 0 || j < 0 || j >= shown.length) return;
+  // 保存した順（データにない銘柄も含む）の中で、表示上の隣どうしを入れ替える
+  const full = [...balOrder, ...shown.filter((s) => !balOrder.includes(s))];
+  const a = full.indexOf(shown[i]);
+  const b = full.indexOf(shown[j]);
+  [full[a], full[b]] = [full[b], full[a]];
+  balOrder = full;
+  await putSetting('balanceOrder', balOrder);
+  refreshAll();
+}
+
+function renderOrder() {
+  const shown = orderSymbols(dataSymbols());
+  $('orderList').replaceChildren(...(shown.length ? shown.map((sym, i) => el('li', {},
+    el('span', { class: 'sym-name' }, sym),
+    Object.assign(el('button', { type: 'button', 'aria-label': sym + ' を上へ', onclick: () => moveSymbol(sym, -1) }, '↑'), { disabled: i === 0 }),
+    Object.assign(el('button', { type: 'button', 'aria-label': sym + ' を下へ', onclick: () => moveSymbol(sym, 1) }, '↓'), { disabled: i === shown.length - 1 })))
+    : [el('li', { class: 'muted' }, 'データを読み込むと表示されます')]));
+}
+
+$('orderReset').addEventListener('click', async () => {
+  balOrder = [];
+  await delSetting('balanceOrder');
+  refreshAll();
+});
 
 function renderTx() {
   if (!data) return;
@@ -307,7 +358,8 @@ function renderTx() {
 
   // 残高
   const t = data.targets.find((x) => x.address.toLowerCase() === target);
-  $('balances').replaceChildren(...Object.entries(t ? t.balances : {}).map(([sym, v]) => balanceCard(sym, v, target)));
+  const bal = t ? t.balances : {};
+  $('balances').replaceChildren(...orderSymbols(Object.keys(bal)).map((sym) => balanceCard(sym, bal[sym], target)));
 
   // 取引
   const rows = data.transfers
@@ -586,6 +638,7 @@ function refreshAll() {
     renderDeposit();
   }
   renderBook();
+  renderOrder();
   renderDriveInfo();
   showStatus();
 }
@@ -638,6 +691,7 @@ $('updateBtn').addEventListener('click', async () => {
   await loadSavedRank();
   depMode = (await getSetting('depMode')) || Deposit.MODE_NET;
   depPrice = Number(await getSetting('depPrice')) || 0;
+  balOrder = (await getSetting('balanceOrder')) || [];
   refreshAll();
   showStorageInfo();
 })();
