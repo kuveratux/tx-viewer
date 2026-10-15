@@ -3,8 +3,8 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<!-- 通信先を自分のサイトだけに限定する（アドレス帳が外部へ送られないための保険） -->
-<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'self'; manifest-src 'self'; worker-src 'self'; base-uri 'self'; form-action 'none'">
+<!-- 通信先を自分のサイトと Google ドライブ連携（ログイン・ファイル選択・取得）だけに限定する -->
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https://accounts.google.com/gsi/client https://apis.google.com https://www.gstatic.com; style-src 'self' 'unsafe-inline' https://accounts.google.com/gsi/style; img-src 'self' data: https://*.googleusercontent.com https://ssl.gstatic.com https://www.gstatic.com; connect-src 'self' https://www.googleapis.com https://accounts.google.com/gsi/; frame-src https://accounts.google.com/gsi/ https://docs.google.com https://drive.google.com https://content.googleapis.com; manifest-src 'self'; worker-src 'self'; base-uri 'self'; form-action 'none'">
 <meta name="referrer" content="no-referrer">
 <meta name="theme-color" content="#1f5fbf">
 <title>取引ビューア</title>
@@ -34,10 +34,14 @@
     <div id="dummyNote" class="note" hidden>表示しているのは動作確認用のダミーデータです。</div>
     <div id="emptyNote" class="card" hidden>
       <h2>データがありません</h2>
-      <p class="muted">受け取ったデータファイルを読み込むと、取引が表示されます。</p>
-      <label class="button primary">データファイルを読み込む<input class="dataFile" type="file" accept="application/json,.json" hidden></label>
+      <p class="muted">データを取得すると、取引が表示されます。</p>
+      <div class="row">
+        <button class="primary driveFetch driveOnly" hidden>最新データを取得</button>
+        <label class="button">ファイルから読み込む<input class="dataFile" type="file" accept="application/json,.json" hidden></label>
+      </div>
     </div>
     <div id="txBody" hidden>
+    <div class="row driveOnly" hidden><button class="primary driveFetch">最新データを取得</button></div>
     <label class="field">対象アドレス
       <select id="targetSel"></select>
     </label>
@@ -93,8 +97,21 @@
     <div class="card">
       <h2>データ</h2>
       <p id="dataInfo" class="muted">まだ読み込んでいません。</p>
-      <p class="muted">データは自動では更新されません。新しいデータファイルを受け取ったら、ここから読み込んでください（暗号化されたファイルは合言葉を入力します）。</p>
-      <label class="button primary">データファイルを読み込む<input class="dataFile" type="file" accept="application/json,.json" hidden></label>
+      <p class="muted">データは自動では更新されません。「最新データを取得」を押すか、ファイルから読み込んでください（暗号化されたファイルは合言葉を入力します）。</p>
+      <div class="row">
+        <button class="primary driveFetch driveOnly" hidden>最新データを取得</button>
+        <label class="button">ファイルから読み込む<input class="dataFile" type="file" accept="application/json,.json" hidden></label>
+      </div>
+    </div>
+    <div class="card driveOnly" hidden>
+      <h2>Google ドライブ</h2>
+      <p id="driveInfo" class="muted"></p>
+      <p class="muted">このアプリが読めるのは、ここで選んだファイルだけです。ドライブのほかのファイルは見えません。</p>
+      <div class="row">
+        <button id="drivePickBtn">ファイルを選び直す</button>
+        <button id="driveSignOutBtn">連携を解除</button>
+        <button id="forgetPassBtn" hidden>保存した合言葉を削除</button>
+      </div>
     </div>
   </section>
 </main>
@@ -117,6 +134,7 @@
     <h2>合言葉を入力</h2>
     <p class="muted">このデータファイルは暗号化されています。合言葉は端末の外には送られません。</p>
     <label class="field">合言葉 <input id="passInput" type="password" autocomplete="off" spellcheck="false"></label>
+    <label class="check"><input id="passSave" type="checkbox" checked> この端末に合言葉を保存する（次回から入力不要）</label>
     <div class="row">
       <button value="ok" class="primary">開く</button>
       <button value="cancel" formnovalidate>やめる</button>
@@ -124,6 +142,7 @@
   </form>
 </dialog>
 
+<script src="drive.js"></script>
 <script src="app.js"></script>
 </body>
 </html>

@@ -5,11 +5,12 @@
 // 取引データは扱わない（利用者がファイルを選んで読み込み、端末内の IndexedDB に保存する）
 // 画面のファイルを変えたら VERSION を上げる（古い保管庫が削除され、新しい版に入れ替わる）
 
-const VERSION = 'v2';
+const VERSION = 'v3';
 const SHELL = 'shell-' + VERSION;
 const SHELL_FILES = [
   './',
   'index.html',
+  'drive.js',
   'app.js',
   'style.css',
   'manifest.webmanifest',

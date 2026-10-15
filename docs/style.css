@@ -22,6 +22,7 @@
   }
 }
 * { box-sizing: border-box; }
+[hidden] { display: none !important; }
 html, body { margin: 0; }
 body {
   background: var(--bg);
@@ -89,3 +90,5 @@ button.primary, .button.primary { background: var(--accent); border-color: var(-
 .booklist button { padding: 4px 10px; font-size: 13px; }
 dialog { border: 1px solid var(--line); border-radius: 12px; background: var(--card); color: var(--text); width: min(92vw, 420px); }
 dialog::backdrop { background: rgba(0,0,0,.4); }
+.check { display: flex; gap: 8px; align-items: center; font-size: 13px; color: var(--muted); margin: 8px 0; }
+.row.driveOnly { margin: 0 0 8px; }

@@ -1,7 +1,7 @@
 'use strict';
 
 // 取引ビューア
-// 取引データは、利用者が選んだファイルから読み込む（自動では取りに行かない）。
+// 取引データは、利用者が操作したときだけ読み込む（ファイルを選ぶ、または Google ドライブから取得）。自動では取りに行かない。
 // 取引データ・名前・分類（アドレス帳）は、すべて端末内の IndexedDB だけに保存する。
 
 const $ = (id) => document.getElementById(id);
@@ -111,36 +111,57 @@ function askPassphrase() {
   return new Promise((resolve) => {
     const dlg = $('passDlg');
     $('passInput').value = '';
-    dlg.addEventListener('close', () => resolve(dlg.returnValue === 'ok' ? $('passInput').value : null), { once: true });
+    dlg.addEventListener('close', () => resolve(dlg.returnValue === 'ok' ? { pass: $('passInput').value, save: $('passSave').checked } : null), { once: true });
     dlg.showModal();
   });
 }
 
-async function importDataFile(file) {
+// 端末内の設定（取引データと同じ保存領域に、キーを分けて保存）
+const getSetting = (key) => dbRun('readonly', (s) => s.get(key), DATA_STORE);
+const putSetting = (key, value) => dbRun('readwrite', (s) => s.put(value, key), DATA_STORE);
+const delSetting = (key) => dbRun('readwrite', (s) => s.delete(key), DATA_STORE);
+
+// 暗号化されていれば復号する。保存済みの合言葉を先に試し、だめなら入力を求める。キャンセル時は null
+async function decryptIfNeeded(json) {
+  if (json.format !== 'tx-viewer-data-enc') return json;
+  const saved = await getSetting('passphrase');
+  if (saved) {
+    try { return await decryptData(json, saved); } catch { /* 合言葉が変わった → 入力を求める */ }
+  }
+  for (;;) {
+    const r = await askPassphrase();
+    if (r == null) return null;
+    $('status').textContent = '復号中…';
+    try {
+      const plain = await decryptData(json, r.pass);
+      if (r.save) await putSetting('passphrase', r.pass);
+      else await delSetting('passphrase');
+      return plain;
+    } catch {
+      $('status').textContent = '';
+      if (!confirm('合言葉が違うか、ファイルが壊れています。もう一度入力しますか？')) return null;
+    }
+  }
+}
+
+// 読み込んだ文字列を検証して端末内に保存する。source: 'file' | 'drive'
+async function importDataText(text, fileName, source) {
   let json;
   try {
-    json = JSON.parse(await file.text());
+    json = JSON.parse(text);
   } catch {
     alert('読み込めませんでした：JSON 形式のファイルではありません');
     return;
   }
   try {
-    if (json.format === 'tx-viewer-data-enc') {
-      for (;;) {
-        const pass = await askPassphrase();
-        if (pass == null) return;
-        $('status').textContent = '復号中…';
-        try {
-          json = await decryptData(json, pass);
-          break;
-        } catch {
-          $('status').textContent = '';
-          if (!confirm('合言葉が違うか、ファイルが壊れています。もう一度入力しますか？')) return;
-        }
-      }
-    }
+    json = await decryptIfNeeded(json);
+    if (!json) return;
     validateData(json);
-    const meta = { fileName: file.name, importedAt: new Date().toISOString() };
+    if (data && source === 'drive' && json.generatedAt === data.generatedAt) {
+      alert('すでに最新のデータです（取得：' + new Date(json.generatedAt).toLocaleString('ja-JP', { timeZone: 'Asia/Tokyo' }) + '）');
+      return;
+    }
+    const meta = { fileName, source, importedAt: new Date().toISOString() };
     await dbRun('readwrite', (s) => s.put({ data: json, meta }, 'current'), DATA_STORE);
     data = json;
     dataMeta = meta;
@@ -153,11 +174,68 @@ async function importDataFile(file) {
   }
 }
 
-document.querySelectorAll('.dataFile').forEach((input) => input.addEventListener('change', (e) => {
+document.querySelectorAll('.dataFile').forEach((input) => input.addEventListener('change', async (e) => {
   const file = e.target.files[0];
   e.target.value = '';
-  if (file) importDataFile(file);
+  if (file) importDataText(await file.text(), file.name, 'file');
 }));
+
+//--------------------------------------------------------------
+// Google ドライブから最新データを取得
+//--------------------------------------------------------------
+let driveBusy = false;
+
+async function fetchFromDrive(forcePick) {
+  if (driveBusy) return;
+  if (!Drive.configured()) { alert('Google ドライブの連携が設定されていません。'); return; }
+  driveBusy = true;
+  try {
+    $('status').textContent = '準備中…';
+    await Drive.ensureLoaded();
+    let file = forcePick ? null : await getSetting('driveFile');
+    if (!file) {
+      $('status').textContent = 'ファイルを選択中…';
+      file = await Drive.pick();
+      if (!file) return;
+      await putSetting('driveFile', file);
+      renderDriveInfo();
+    }
+    $('status').textContent = 'ドライブから取得中…';
+    const { meta, text } = await Drive.download(file.id);
+    if (meta.name !== file.name) { file = { id: file.id, name: meta.name }; await putSetting('driveFile', file); renderDriveInfo(); }
+    await importDataText(text, meta.name, 'drive');
+  } catch (err) {
+    if (err.repick) { await delSetting('driveFile'); renderDriveInfo(); }
+    alert(err.message);
+  } finally {
+    driveBusy = false;
+    showStatus();
+  }
+}
+
+async function renderDriveInfo() {
+  const ok = Drive.configured();
+  document.querySelectorAll('.driveOnly').forEach((e) => { e.hidden = !ok; });
+  if (!ok) return;
+  const file = await getSetting('driveFile');
+  const pass = await getSetting('passphrase');
+  $('driveInfo').textContent = file ? '取得するファイル：' + file.name : '取得するファイル：未選択（初回に選びます）';
+  $('forgetPassBtn').hidden = !pass;
+}
+
+document.querySelectorAll('.driveFetch').forEach((b) => b.addEventListener('click', () => fetchFromDrive(false)));
+$('drivePickBtn').addEventListener('click', () => fetchFromDrive(true));
+$('driveSignOutBtn').addEventListener('click', async () => {
+  Drive.signOut();
+  await delSetting('driveFile');
+  renderDriveInfo();
+  alert('Google との連携を解除しました（次回はログインとファイルの選択からやり直します）');
+});
+$('forgetPassBtn').addEventListener('click', async () => {
+  await delSetting('passphrase');
+  renderDriveInfo();
+  alert('保存していた合言葉を削除しました');
+});
 
 function showStatus() {
   $('status').textContent = data
@@ -341,6 +419,7 @@ function refreshAll() {
     $('dummyNote').hidden = true;
   }
   renderBook();
+  renderDriveInfo();
   showStatus();
 }
 
