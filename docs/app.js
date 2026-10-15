@@ -281,8 +281,10 @@ function renderTx() {
   $('txList').replaceChildren(...rows.map((x) => {
     const cp = x.dir === 'in' ? x.from : x.to;
     const b = book.get(cp.toLowerCase());
+    // 相手側だけを表示する（自分＝上で選んだ対象アドレス）
     const cpBtn = el('button', { class: 'cp', type: 'button', onclick: () => openNameDialog(cp) },
-      (x.dir === 'in' ? '← ' : '→ ') + (b ? b.name : short(cp)), b && b.category ? el('span', { class: 'cat' }, b.category) : null);
+      el('span', { class: 'cp-label' }, x.dir === 'in' ? '受取元：' : '送付先：'),
+      b ? b.name : short(cp), b && b.category ? el('span', { class: 'cat' }, b.category) : null);
     const link = data.dummy || !data.chain.explorer ? null :
       el('a', { class: 'tx-link', href: data.chain.explorer + '/tx/' + x.tx, target: '_blank', rel: 'noopener noreferrer' }, 'エクスプローラーで見る');
     return el('li', {},
