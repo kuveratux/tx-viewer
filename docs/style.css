@@ -92,3 +92,5 @@ dialog { border: 1px solid var(--line); border-radius: 12px; background: var(--c
 dialog::backdrop { background: rgba(0,0,0,.4); }
 .check { display: flex; gap: 8px; align-items: center; font-size: 13px; color: var(--muted); margin: 8px 0; }
 .row.driveOnly { margin: 0 0 8px; }
+.note.update { margin: 10px 16px 0; display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.note.update button { padding: 4px 12px; }

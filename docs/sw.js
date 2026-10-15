@@ -3,13 +3,15 @@
 // Service Worker（端末内の受付係）
 // - 画面のファイル：保管庫を優先して返し、裏で新しい版を取りに行く
 // 取引データは扱わない（利用者がファイルを選んで読み込み、端末内の IndexedDB に保存する）
-// 画面のファイルを変えたら VERSION を上げる（古い保管庫が削除され、新しい版に入れ替わる）
+// 画面のファイルを変えたら version.js の APP_VERSION を上げる（古い保管庫が削除され、新しい版に入れ替わる）
 
-const VERSION = 'v4';
+importScripts('version.js');
+const VERSION = self.APP_VERSION;
 const SHELL = 'shell-' + VERSION;
 const SHELL_FILES = [
   './',
   'index.html',
+  'version.js',
   'drive.js',
   'app.js',
   'style.css',
@@ -20,7 +22,7 @@ const SHELL_FILES = [
 ];
 
 self.addEventListener('install', (e) => {
-  e.waitUntil(caches.open(SHELL).then((c) => c.addAll(SHELL_FILES)).then(() => self.skipWaiting()));
+  e.waitUntil(caches.open(SHELL).then((c) => c.addAll(SHELL_FILES.map((u) => new Request(u, { cache: 'reload' })))).then(() => self.skipWaiting()));
 });
 
 self.addEventListener('activate', (e) => {
@@ -34,6 +36,7 @@ self.addEventListener('activate', (e) => {
 self.addEventListener('fetch', (e) => {
   const url = new URL(e.request.url);
   if (e.request.method !== 'GET' || url.origin !== location.origin) return;
+  if (e.request.cache === 'no-store' || e.request.cache === 'reload') return; // 更新確認などは保管庫を通さない
 
   // 保管庫優先（裏で更新）
   e.respondWith(

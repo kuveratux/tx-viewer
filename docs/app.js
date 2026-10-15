@@ -423,6 +423,47 @@ function refreshAll() {
   showStatus();
 }
 
+//--------------------------------------------------------------
+// バージョンと更新
+//--------------------------------------------------------------
+$('appVersion').textContent = self.APP_VERSION;
+// 保管庫（画面のファイル）を消してから再読み込みし、確実に新しい版を取り直す
+async function applyUpdate() {
+  try {
+    for (const k of await caches.keys()) await caches.delete(k);
+    const reg = await navigator.serviceWorker.getRegistration();
+    if (reg) await reg.update();
+  } catch { /* 失敗しても再読み込みで取り直す */ }
+  location.reload();
+}
+$('reloadBtn').addEventListener('click', applyUpdate);
+
+if ('serviceWorker' in navigator) {
+  // 新しい版の Service Worker に切り替わったら、再読み込みを促す（初回のインストール時は除く）
+  const hadController = !!navigator.serviceWorker.controller;
+  navigator.serviceWorker.addEventListener('controllerchange', () => { if (hadController) $('updateNote').hidden = false; });
+}
+
+$('updateBtn').addEventListener('click', async () => {
+  const reg = 'serviceWorker' in navigator && await navigator.serviceWorker.getRegistration();
+  if (!reg) { alert('更新を確認できませんでした'); return; }
+  $('updateBtn').disabled = true;
+  try {
+    await reg.update();
+    const res = await fetch('version.js', { cache: 'no-store' });
+    const latest = ((await res.text()).match(/APP_VERSION\s*=\s*'([^']+)'/) || [])[1];
+    if (latest && latest !== self.APP_VERSION) {
+      if (confirm('新しいバージョン（' + latest + '）があります。更新しますか？')) await applyUpdate();
+    } else {
+      alert('最新のバージョンです（' + self.APP_VERSION + '）');
+    }
+  } catch {
+    alert('更新を確認できませんでした（通信を確認してください）');
+  } finally {
+    $('updateBtn').disabled = false;
+  }
+});
+
 (async function init() {
   if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(console.error);
   await loadBook();
