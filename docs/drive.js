@@ -7,9 +7,9 @@
 
 // Google Cloud の設定値（公開しても問題ない値。API キーは HTTP リファラーと API の種類で制限しておく）
 const GOOGLE = {
-  clientId: '',  // OAuth クライアント ID（…apps.googleusercontent.com）
-  apiKey: '',    // API キー（Google Picker API 用）
-  appId: '',     // プロジェクト番号（数字）
+  clientId: '62334130469-9cd1ogi940lagb7cm9l25f8809l7k7tg.apps.googleusercontent.com',  // OAuth クライアント ID（…apps.googleusercontent.com）
+  apiKey: 'AIzaSyD7iwB6KuIykAVptoMmMD7Dg43x0xm_nxQ',    // API キー（Google Picker API 用）
+  appId: '62334130469',     // プロジェクト番号（数字）
 };
 const SCOPE = 'https://www.googleapis.com/auth/drive.file';
 
