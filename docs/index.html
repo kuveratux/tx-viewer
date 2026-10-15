@@ -16,6 +16,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-title" content="取引ビューア">
 <link rel="stylesheet" href="style.css">
+<script src="appearance.js"></script>
 </head>
 <body>
 <header class="bar">
@@ -128,6 +129,24 @@
       <h2>このアプリについて</h2>
       <p>バージョン：<b id="appVersion"></b></p>
       <div class="row"><button id="updateBtn">更新を確認</button></div>
+    </div>
+    <div class="card">
+      <h2>表示と配色</h2>
+      <p class="muted">この端末だけの設定です。</p>
+      <label class="field">表示名（空欄なら「取引ビューア」）<input id="lookName" maxlength="30" autocomplete="off"></label>
+      <div class="field">アイコン</div>
+      <div id="lookIcons" class="icon-grid"></div>
+      <label class="button">画像を選ぶ<input id="lookIconFile" type="file" accept="image/*" hidden></label>
+      <label class="field">配色
+        <select id="lookTheme">
+          <option value="auto">自動（端末に合わせる）</option>
+          <option value="light">ライト</option>
+          <option value="dark">ダーク</option>
+        </select>
+      </label>
+      <div class="row"><button id="lookReset">元に戻す</button></div>
+      <p class="muted"><b>iPhone</b>：ホーム画面の名前とアイコンは、追加したときの内容で固定されます。変えるには、削除して「ホーム画面に追加」し直してください。<b>削除するとこのアプリのデータ（アドレス帳・合言葉・読み込んだデータ）も消える</b>ので、先にアドレス帳を「書き出し」してください。</p>
+      <p class="muted"><b>Android</b>：ホーム画面の名前とアイコンは、全員共通の既定のままです（アプリの中の表示は変わります）。</p>
     </div>
     <div class="card">
       <h2>残高の表示順</h2>

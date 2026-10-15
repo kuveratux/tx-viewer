@@ -12,6 +12,7 @@ const SHELL_FILES = [
   './',
   'index.html',
   'version.js',
+  'appearance.js',
   'deposit.js',
   'drive.js',
   'app.js',
@@ -20,6 +21,11 @@ const SHELL_FILES = [
   'icons/icon-180.png',
   'icons/icon-192.png',
   'icons/icon-512.png',
+  'icons/presets/candle.png',
+  'icons/presets/trend.png',
+  'icons/presets/chain.png',
+  'icons/presets/gold.png',
+  'icons/presets/classic.png',
 ];
 
 self.addEventListener('install', (e) => {
