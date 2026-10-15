@@ -1,0 +1,109 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<!-- 通信先を自分のサイトだけに限定する（アドレス帳が外部へ送られないための保険） -->
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'self'; manifest-src 'self'; worker-src 'self'; base-uri 'self'; form-action 'none'">
+<meta name="referrer" content="no-referrer">
+<meta name="theme-color" content="#1f5fbf">
+<title>取引ビューア</title>
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icons/icon-192.png">
+<link rel="apple-touch-icon" href="icons/icon-180.png">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="取引ビューア">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<header class="bar">
+  <h1>取引ビューア</h1>
+  <span id="status" class="status"></span>
+</header>
+
+<nav class="tabs" role="tablist">
+  <button role="tab" data-tab="tx" aria-selected="true">取引</button>
+  <button role="tab" data-tab="book">アドレス帳</button>
+  <button role="tab" data-tab="settings">設定</button>
+</nav>
+
+<main>
+  <!-- 取引 -->
+  <section id="tab-tx" class="tab">
+    <div id="dummyNote" class="note" hidden>表示しているのは動作確認用のダミーデータです。</div>
+    <label class="field">対象アドレス
+      <select id="targetSel"></select>
+    </label>
+    <div id="balances" class="cards"></div>
+    <div class="filters">
+      <label>トークン <select id="tokenSel"></select></label>
+      <label>向き
+        <select id="dirSel">
+          <option value="">すべて</option>
+          <option value="in">受取</option>
+          <option value="out">送付</option>
+        </select>
+      </label>
+    </div>
+    <p id="txCount" class="muted"></p>
+    <ul id="txList" class="txlist"></ul>
+  </section>
+
+  <!-- アドレス帳 -->
+  <section id="tab-book" class="tab" hidden>
+    <p class="muted">名前と分類はこの端末の中だけに保存され、外部には送られません。</p>
+    <form id="bookForm" class="card form">
+      <label class="field">アドレス <input id="bAddr" required placeholder="0x..." autocomplete="off" spellcheck="false"></label>
+      <label class="field">名前 <input id="bName" required autocomplete="off"></label>
+      <label class="field">分類 <input id="bCat" list="catList" autocomplete="off" placeholder="例：取引所、知人"></label>
+      <datalist id="catList"></datalist>
+      <div class="row">
+        <button type="submit" class="primary">保存</button>
+        <button type="button" id="bClear">クリア</button>
+      </div>
+    </form>
+    <ul id="bookList" class="booklist"></ul>
+  </section>
+
+  <!-- 設定 -->
+  <section id="tab-settings" class="tab" hidden>
+    <div class="card">
+      <h2>アドレス帳のバックアップ</h2>
+      <p class="muted">機種変更や、端末のデータが消えたときに備えて、ファイルに書き出しておけます。</p>
+      <div class="row">
+        <button id="exportBtn" class="primary">書き出し</button>
+        <label class="button">読み込み<input id="importFile" type="file" accept="application/json,.json" hidden></label>
+      </div>
+      <p id="storageInfo" class="muted"></p>
+    </div>
+    <div class="card">
+      <h2>ホーム画面に追加</h2>
+      <button id="installBtn" class="primary" hidden>アプリとしてインストール</button>
+      <p class="muted"><b>Android（Chrome）</b>：メニュー（︙）→「ホーム画面に追加」または「アプリをインストール」</p>
+      <p class="muted"><b>iPhone（Safari）</b>：共有ボタン →「ホーム画面に追加」</p>
+    </div>
+    <div class="card">
+      <h2>データ</h2>
+      <p id="dataInfo" class="muted"></p>
+      <button id="reloadBtn">データを再読み込み</button>
+    </div>
+  </section>
+</main>
+
+<dialog id="nameDlg">
+  <form method="dialog" id="nameForm">
+    <h2>名前を登録</h2>
+    <p id="dlgAddr" class="mono"></p>
+    <label class="field">名前 <input id="dlgName" autocomplete="off"></label>
+    <label class="field">分類 <input id="dlgCat" list="catList" autocomplete="off"></label>
+    <div class="row">
+      <button value="save" class="primary">保存</button>
+      <button value="cancel" formnovalidate>やめる</button>
+    </div>
+  </form>
+</dialog>
+
+<script src="app.js"></script>
+</body>
+</html>
