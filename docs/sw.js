@@ -35,7 +35,8 @@ self.addEventListener('install', (e) => {
 self.addEventListener('activate', (e) => {
   e.waitUntil(
     caches.keys()
-      .then((keys) => Promise.all(keys.filter((k) => k !== SHELL).map((k) => caches.delete(k))))
+      // 同じドメインの他アプリの保管庫を消さないよう、自分の古い版（shell-）だけを削除する
+      .then((keys) => Promise.all(keys.filter((k) => k.startsWith('shell-') && k !== SHELL).map((k) => caches.delete(k))))
       .then(() => self.clients.claim())
   );
 });

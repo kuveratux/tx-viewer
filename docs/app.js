@@ -693,7 +693,8 @@ $('appVersion').textContent = self.APP_VERSION;
 // 保管庫（画面のファイル）を消してから再読み込みし、確実に新しい版を取り直す
 async function applyUpdate() {
   try {
-    for (const k of await caches.keys()) await caches.delete(k);
+    // 同じドメインの他アプリの保管庫は残し、自分の保管庫（shell-）だけを削除する
+    for (const k of await caches.keys()) if (k.startsWith('shell-')) await caches.delete(k);
     const reg = await navigator.serviceWorker.getRegistration();
     if (reg) await reg.update();
   } catch { /* 失敗しても再読み込みで取り直す */ }
